@@ -22,7 +22,7 @@ ftp-hybrid-template/
 | Tool | Version |
 |---|---|
 | Android Studio | Hedgehog (2023.1.1) or newer |
-| Android SDK | API 24 (Android 7.0) minimum |
+| Android SDK | API 23 (Android 6.0) minimum |
 | Java | 17 |
 | Gradle | 8.x |
 
@@ -35,11 +35,11 @@ Maven Central — no local patched JAR or AAR is required.
 
 ```groovy
 // ftp-engine-core/build.gradle and ftp-hybrid-server/build.gradle
-implementation "org.apache.mina:mina-core:2.1.12"
+implementation "org.apache.mina:mina-core:2.0.21"
 ```
 
 The `mina-android-patched` module referenced in older versions of this template
-has been **removed**. MINA 2.1.12 from Maven Central works on Android API 24+
+has been **removed**. MINA 2.0.21 from Maven Central works on Android API 23+
 without modification when the following packaging exclusions are present (already
 configured in both modules):
 
@@ -65,8 +65,8 @@ packagingOptions {
 ### 1. Clone
 
 ```bash
-git clone https://github.com/Howielyn/ftp-hybrid-template.git
-cd ftp-hybrid-template
+git clone [https://github.com/nahyo0901/ftp-hybrid-template-for-api23.git]
+cd ftp-hybrid-template-for-api23
 ```
 
 ### 2. Open in Android Studio
@@ -75,7 +75,7 @@ File → Open → select the cloned folder. Let Gradle sync finish.
 
 ### 3. Run the sample app
 
-Connect a physical device or start an emulator (API 24+), select
+Connect a physical device or start an emulator (API 23+), select
 `sample-app` as the run configuration, and press Run.
 
 ---
