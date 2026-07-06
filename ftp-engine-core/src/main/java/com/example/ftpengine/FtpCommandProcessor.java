@@ -32,6 +32,21 @@ public class FtpCommandProcessor {
         }
     }
 
+    /**
+     * Writes a raw response to the session without appending an extra \r\n.
+     * Use this for multiline responses (FEAT, STAT, etc.) that already contain
+     * their own \r\n line endings — reply() would add a second \r\n after the
+     * final line, producing a blank line that commons-net 3.11.x rejects with
+     * MalformedServerReplyException.
+     */
+    private void replyRaw(IoSession s, String msg) {
+        try {
+            s.write(msg);
+        } catch (Exception e) {
+            s.closeNow();
+        }
+    }
+
     /* ===================== MAIN HANDLER ===================== */
 
     public void handle(IoSession s, FtpSessionContext c, String line) {
@@ -61,7 +76,11 @@ public class FtpCommandProcessor {
 
                 case "USER":
                     c.username = arg;
-                    reply(s, "331 OK");
+                    // FIX 1: RFC 959 §4.1.1 requires the text to indicate a
+                    // password is needed. "331 OK" is non-standard and causes
+                    // strict clients (Screenshot 3) to fail parsing the USER
+                    // response before they even send PASS.
+                    reply(s, "331 Password required for " + (arg != null ? arg : ""));
                     break;
 
                 case "PASS":
@@ -78,7 +97,28 @@ public class FtpCommandProcessor {
                     break;
 
                 case "FEAT":
-                    reply(s, "211-Features\r\n PASV\r\n UTF8\r\n211 End");
+                    // FIX 2: Use replyRaw() instead of reply() here.
+                    //
+                    // reply() appends \r\n unconditionally. When the argument
+                    // already ends with \r\n (as a multiline response must),
+                    // reply() produces a trailing blank line:
+                    //
+                    //   "211 End\r\n"  ← last real line
+                    //   "\r\n"         ← extra blank line from reply()
+                    //
+                    // commons-net 3.11.1 reads that blank line as a new FTP
+                    // response, tries to parse "" as a reply code, and throws
+                    // MalformedServerReplyException with "Server Reply: " (blank)
+                    // — exactly the error in the log.
+                    //
+                    // RFC 2389 also requires the opening line to be "211-" with
+                    // NO trailing colon. "211-Features:" (with colon) is what
+                    // Apache FtpServer emits; we use "211-Features" (no colon).
+                    replyRaw(s,
+                            "211-Features\r\n" +
+                            " PASV\r\n" +
+                            " UTF8\r\n" +
+                            "211 End\r\n");
                     break;
 
                 case "NOOP":
@@ -148,15 +188,12 @@ public class FtpCommandProcessor {
             c.passiveDataSocket = null;
             c.pasvPort = ss.getLocalPort();
 
-            // Background thread accepts the data connection from FileZilla.
-            // passiveDataSocket is volatile so the write is immediately
-            // visible to waitForData() polling on the command thread.
             new Thread(() -> {
                 try {
                     Socket socket = ss.accept();
                     socket.setKeepAlive(true);
                     socket.setTcpNoDelay(true);
-                    c.passiveDataSocket = socket; // volatile write — visible immediately
+                    c.passiveDataSocket = socket;
                 } catch (Exception ignored) {}
             }).start();
 
@@ -184,9 +221,6 @@ public class FtpCommandProcessor {
         try {
             reply(s, "150 Opening data connection");
 
-            // waitForData() reads the volatile passiveDataSocket field.
-            // Because the field is volatile, this loop is guaranteed to
-            // observe the write made by the accept-thread in openPasv().
             Socket d = waitForData(c);
             if (d == null) {
                 reply(s, "425 No data connection");
@@ -197,9 +231,6 @@ public class FtpCommandProcessor {
 
             String[] files = fs.list(c.cwd);
             if (files != null) {
-                // FIX: emit proper Unix ls -l format so FileZilla can parse
-                // the directory listing. Bare filenames are not valid FTP
-                // LIST output and cause clients to fail silently.
                 String timestamp = new SimpleDateFormat("MMM dd HH:mm", Locale.US)
                         .format(new Date());
 
@@ -212,7 +243,6 @@ public class FtpCommandProcessor {
 
                     boolean isDir = fs.isDirectory(entryPath);
 
-                    // Format: type+perms links owner group size date name
                     sb.append(isDir ? "drwxr-xr-x" : "-rw-r--r--")
                       .append(" 1 ftp ftp 0 ")
                       .append(timestamp)
@@ -296,10 +326,6 @@ public class FtpCommandProcessor {
 
     /* ===================== SAFE WAIT ===================== */
 
-    /**
-     * Polls for the passive data socket set by the background accept-thread.
-     * Works correctly because passiveDataSocket is volatile in FtpSessionContext.
-     */
     private Socket waitForData(FtpSessionContext c) {
 
         for (int i = 0; i < 200; i++) {
