@@ -266,63 +266,71 @@ public class FtpCommandProcessor {
 
     /* ===================== RETR ===================== */
 
-    private void retr(IoSession s, FtpSessionContext c, String f) throws Exception {
+      private static final int BUFFER_SIZE = 64 * 1024; // 64KB, never holds more than this in memory
 
-        if (f == null) {
-            reply(s, "501 Missing filename");
-            return;
-        }
+private void retr(IoSession s, FtpSessionContext c, String f) throws Exception {
 
-        reply(s, "150 Opening data connection");
-
-        Socket d = waitForData(c);
-        if (d == null) {
-            reply(s, "425 No data connection");
-            return;
-        }
-
-        byte[] data = fs.readFile(c.cwd + "/" + f);
-
-        d.getOutputStream().write(data);
-        d.getOutputStream().flush();
-        d.close();
-
-        reply(s, "226 Transfer complete");
+    if (f == null) {
+        reply(s, "501 Missing filename");
+        return;
     }
 
-    /* ===================== STOR ===================== */
+    reply(s, "150 Opening data connection");
 
-    private void stor(IoSession s, FtpSessionContext c, String f) throws Exception {
+    Socket d = waitForData(c);
+    if (d == null) {
+        reply(s, "425 No data connection");
+        return;
+    }
 
-        if (f == null) {
-            reply(s, "501 Missing filename");
-            return;
-        }
+    try (InputStream in = fs.openInputStream(c.cwd + "/" + f);
+         OutputStream out = d.getOutputStream()) {
 
-        reply(s, "150 Opening data connection");
-
-        Socket d = waitForData(c);
-        if (d == null) {
-            reply(s, "425 No data connection");
-            return;
-        }
-
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        InputStream in = d.getInputStream();
-
-        byte[] buf = new byte[8192];
+        byte[] buf = new byte[BUFFER_SIZE];
         int r;
-
         while ((r = in.read(buf)) != -1) {
             out.write(buf, 0, r);
         }
+        out.flush();
 
-        fs.writeFile(c.cwd + "/" + f, out.toByteArray());
-
+    } finally {
         d.close();
-
-        reply(s, "226 Transfer complete");
     }
+
+    reply(s, "226 Transfer complete");
+}
+
+private void stor(IoSession s, FtpSessionContext c, String f) throws Exception {
+
+    if (f == null) {
+        reply(s, "501 Missing filename");
+        return;
+    }
+
+    reply(s, "150 Opening data connection");
+
+    Socket d = waitForData(c);
+    if (d == null) {
+        reply(s, "425 No data connection");
+        return;
+    }
+
+    try (InputStream in = d.getInputStream();
+         OutputStream out = fs.openOutputStream(c.cwd + "/" + f)) {
+
+        byte[] buf = new byte[BUFFER_SIZE];
+        int r;
+        while ((r = in.read(buf)) != -1) {
+            out.write(buf, 0, r);
+        }
+        out.flush();
+
+    } finally {
+        d.close();
+    }
+
+    reply(s, "226 Transfer complete");
+}
 
     /* ===================== SAFE WAIT ===================== */
 
