@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 
 public class FtpFileSystem implements IFtpFileSystem {
@@ -32,8 +34,6 @@ public class FtpFileSystem implements IFtpFileSystem {
         return resolve(path).exists();
     }
 
-    // FIX: implement isDirectory() so FtpCommandProcessor can emit the
-    // correct 'd' vs '-' prefix in LIST responses.
     @Override
     public boolean isDirectory(String path) {
         return resolve(path).isDirectory();
@@ -65,23 +65,15 @@ public class FtpFileSystem implements IFtpFileSystem {
     }
 
     @Override
-    public byte[] readFile(String path) throws IOException {
-        File f = resolve(path);
-        FileInputStream in = new FileInputStream(f);
-        byte[] data = new byte[(int) f.length()];
-        in.read(data);
-        in.close();
-        return data;
+    public InputStream openInputStream(String path) throws IOException {
+        return new FileInputStream(resolve(path));
     }
 
     @Override
-    public void writeFile(String path, byte[] data) throws IOException {
+    public OutputStream openOutputStream(String path) throws IOException {
         File f = resolve(path);
         File parent = f.getParentFile();
-        if (!parent.exists()) parent.mkdirs();
-        FileOutputStream out = new FileOutputStream(f);
-        out.write(data);
-        out.flush();
-        out.close();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        return new FileOutputStream(f);
     }
 }
