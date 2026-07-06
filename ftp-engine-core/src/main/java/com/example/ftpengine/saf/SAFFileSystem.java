@@ -85,24 +85,15 @@ public class SAFFileSystem implements IFtpFileSystem {
     /* ===================== READ / WRITE ===================== */
 
     @Override
-    public byte[] readFile(String path) throws IOException {
-        try (InputStream in = getFile(path).openInput();
-             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buf = new byte[8192];
-            int r;
-            while ((r = in.read(buf)) != -1) out.write(buf, 0, r);
-            return out.toByteArray();
-        }
+    public InputStream openInputStream(String path) throws IOException {
+        return getFile(path).openInput();
     }
 
     @Override
-    public void writeFile(String path, byte[] data) throws IOException {
-        try (OutputStream out = getFile(path).openOutput(false)) {
-            out.write(data);
-            out.flush();
-        }
+    public OutputStream openOutputStream(String path) throws IOException {
+        return getFile(path).openOutput(false);
     }
-
+    
     /* ===================== HELPERS ===================== */
 
     private String normalize(String path) {
