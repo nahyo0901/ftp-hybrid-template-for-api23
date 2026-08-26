@@ -1,42 +1,30 @@
 package com.example.ftpengine;
 
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.util.HashSet;
-import java.util.Set;
+import org.apache.ftpserver.ftplet.FileSystemFactory;
+import org.apache.ftpserver.ftplet.FileSystemView;
+import org.apache.ftpserver.ftplet.FtpException;
+import org.apache.ftpserver.ftplet.User;
 
-public class PasvPortPool {
+/**
+ * Adapts an IFtpFileSystem to Apache FtpServer's FileSystemFactory interface.
+ * Every logged-in user gets the same backing IFtpFileSystem (single-root
+ * server, matching the previous Hybrid engine's behavior), just wrapped in
+ * its own FileSystemView so each session tracks its own cwd independently.
+ *
+ * Recycled from the old (unused) PasvPortPool helper -- manual PASV port
+ * management is no longer needed at all, since ftpserver-core handles PASV
+ * (and PORT) port allocation internally.
+ */
+public class PasvPortPool implements FileSystemFactory {
 
-    private final int minPort;
-    private final int maxPort;
-    private int next;
-    private final Set<Integer> used = new HashSet<>();
+    private final IFtpFileSystem fs;
 
-    public PasvPortPool(int minPort, int maxPort) {
-        this.minPort = minPort;
-        this.maxPort = maxPort;
-        this.next = minPort;
+    public PasvPortPool(IFtpFileSystem fs) {
+        this.fs = fs;
     }
 
-    public synchronized ServerSocket openSocket() throws IOException {
-        for (int i = 0; i <= (maxPort - minPort); i++) {
-
-            int port = next++;
-            if (next > maxPort) next = minPort;
-
-            if (used.contains(port)) continue;
-
-            try {
-                ServerSocket socket = new ServerSocket(port);
-                used.add(port);
-                return socket;
-            } catch (IOException ignored) {}
-        }
-
-        throw new IOException("No free PASV ports");
-    }
-
-    public synchronized void release(int port) {
-        used.remove(port);
+    @Override
+    public FileSystemView createFileSystemView(User user) throws FtpException {
+        return new FtpDataConnection(fs);
     }
 }

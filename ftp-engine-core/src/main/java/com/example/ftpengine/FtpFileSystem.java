@@ -65,6 +65,18 @@ public class FtpFileSystem implements IFtpFileSystem {
     }
 
     @Override
+    public long length(String path) throws IOException {
+        File f = resolve(path);
+        return f.exists() ? f.length() : -1;
+    }
+
+    @Override
+    public long lastModified(String path) throws IOException {
+        File f = resolve(path);
+        return f.exists() ? f.lastModified() : -1;
+    }
+
+    @Override
     public InputStream openInputStream(String path) throws IOException {
         return new FileInputStream(resolve(path));
     }

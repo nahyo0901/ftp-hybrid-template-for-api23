@@ -14,6 +14,24 @@ public interface IFtpFileSystem {
     String[] list(String path) throws IOException;
 
     /**
+     * Get the size of a file in bytes.
+     *
+     * @param path file path relative to the FTP root
+     * @return file size in bytes, or -1 if the file doesn't exist
+     * @throws IOException on error
+     */
+    long length(String path) throws IOException;
+
+    /**
+     * Get the last-modified time of a file/directory.
+     *
+     * @param path file path relative to the FTP root
+     * @return last-modified time as epoch millis, or -1 if unavailable
+     * @throws IOException on error
+     */
+    long lastModified(String path) throws IOException;
+
+    /**
      * Open a stream to read a file's contents.
      * Caller is responsible for closing the returned stream.
      *

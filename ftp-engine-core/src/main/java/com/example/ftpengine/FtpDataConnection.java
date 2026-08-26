@@ -1,52 +1,108 @@
 package com.example.ftpengine;
 
-import java.io.IOException;
-import java.net.*;
+import org.apache.ftpserver.ftplet.FileSystemView;
+import org.apache.ftpserver.ftplet.FtpFile;
+import org.apache.ftpserver.ftplet.FtpException;
 
 /**
- * Simple data connection helper supporting passive and active mode.
+ * Adapts an IFtpFileSystem to Apache FtpServer's FileSystemView interface.
+ * One instance per logged-in session, tracking that session's cwd.
+ *
+ * Recycled from the old (unused) FtpDataConnection helper. The actual
+ * data-connection handling (PASV/PORT/STOR/RETR socket work) is now owned
+ * entirely by the ftpserver-core library -- that hand-rolled logic is what
+ * this whole redesign replaces.
  */
-public class FtpDataConnection {
-    private ServerSocket pasvSocket;
-    private Socket activeSocket;
-    private Socket acceptedSocket;
+public class FtpDataConnection implements FileSystemView {
 
-    // Start passive on an ephemeral port (port 0) or fixed port
-    public void startPassive(int port) throws IOException {
-        pasvSocket = new ServerSocket(port);
+    private final IFtpFileSystem fs;
+    private String cwd = "/";
+
+    public FtpDataConnection(IFtpFileSystem fs) {
+        this.fs = fs;
     }
 
-    // For passive, accept returns the client connection
-    public Socket accept() throws IOException {
-        if (pasvSocket == null) throw new IllegalStateException("Passive socket not started");
-        acceptedSocket = pasvSocket.accept();
-        return acceptedSocket;
+    @Override
+    public FtpFile getHomeDirectory() throws FtpException {
+        return new FtpSession(fs, "/");
     }
 
-    // Connect to client (active mode)
-    public void connectActive(String host, int port) throws IOException {
-        activeSocket = new Socket();
-        activeSocket.connect(new InetSocketAddress(host, port), 10000);
+    @Override
+    public FtpFile getWorkingDirectory() throws FtpException {
+        return new FtpSession(fs, cwd);
     }
 
-    public boolean isConnected() {
-        return (activeSocket != null && activeSocket.isConnected()) ||
-               (acceptedSocket != null && acceptedSocket.isConnected());
+    @Override
+    public boolean changeWorkingDirectory(String dir) throws FtpException {
+        String target = resolve(dir);
+        try {
+            if (fs.exists(target) && fs.isDirectory(target)) {
+                cwd = target;
+                return true;
+            }
+        } catch (Exception e) {
+            android.util.Log.e("FtpDataConnection", "changeWorkingDirectory failed for target=" + target, e);
+        }
+        return false;
     }
 
-    public Socket getSocket() {
-        if (activeSocket != null) return activeSocket;
-        return acceptedSocket;
+    @Override
+    public FtpFile getFile(String file) throws FtpException {
+        return new FtpSession(fs, resolve(file));
     }
 
-    public int getLocalPort() {
-        if (pasvSocket != null) return pasvSocket.getLocalPort();
-        return -1;
+    @Override
+    public boolean isRandomAccessible() throws FtpException {
+        return true;
     }
 
-    public void stop() {
-        try { if (acceptedSocket != null) acceptedSocket.close(); } catch (Exception ignored) {}
-        try { if (activeSocket != null) activeSocket.close(); } catch (Exception ignored) {}
-        try { if (pasvSocket != null) pasvSocket.close(); } catch (Exception ignored) {}
+    @Override
+    public void dispose() {
+        // no persistent resources to release
+    }
+
+    /**
+     * Resolves an FTP-supplied path argument against the current working
+     * directory into a clean, absolute path.
+     *
+     * BUG FIX: the previous version only collapsed repeated slashes via
+     * a regex, so a literal "." segment (sent by many FTP command
+     * implementations for a bare LIST/argument-less request, e.g.
+     * getFile(".")) was never stripped -- resolve(".") against cwd "/"
+     * produced the literal path "/." instead of "/". That bogus path
+     * failed to match any real file/folder in the SAF backend, causing
+     * fs.list()/fs.exists() to fail, which FtpSession.listFiles() then
+     * silently swallowed into an empty (but "successful") directory
+     * listing -- explaining why every root, both internal and SD-card
+     * storage, showed as empty despite having real content.
+     *
+     * This version tokenizes the path segment-by-segment and explicitly
+     * skips "." and handles ".." (moving up one level), instead of doing
+     * naive string concatenation + regex cleanup.
+     */
+    private String resolve(String arg) {
+        if (arg == null || arg.isEmpty() || arg.equals(".")) return cwd;
+
+        String raw = arg.startsWith("/") ? arg : (cwd.equals("/") ? "/" + arg : cwd + "/" + arg);
+
+        java.util.ArrayDeque<String> stack = new java.util.ArrayDeque<>();
+        for (String part : raw.split("/")) {
+            if (part.isEmpty() || part.equals(".")) {
+                continue; // skip empty segments (from repeated slashes) and "." (current dir)
+            }
+            if (part.equals("..")) {
+                stack.pollLast(); // go up one level; no-op if already at root
+                continue;
+            }
+            stack.addLast(part);
+        }
+
+        if (stack.isEmpty()) return "/";
+
+        StringBuilder sb = new StringBuilder();
+        for (String part : stack) {
+            sb.append('/').append(part);
+        }
+        return sb.toString();
     }
 }

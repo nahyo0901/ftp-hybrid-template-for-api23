@@ -61,6 +61,16 @@ public class SAFFileSystem implements IFtpFileSystem {
         return getFile(from).renameTo(to);
     }
 
+    @Override
+    public long length(String path) throws IOException {
+        return getFile(path).length();
+    }
+
+    @Override
+    public long lastModified(String path) throws IOException {
+        return getFile(path).lastModified();
+    }
+
     /* ===================== LIST ===================== */
 
     @Override

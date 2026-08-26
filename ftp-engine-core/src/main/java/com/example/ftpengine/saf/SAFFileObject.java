@@ -116,6 +116,43 @@ public class SAFFileObject {
         return exists() && !isDirectory();
     }
 
+    /**
+     * Returns file size in bytes, or -1 if not found/unavailable.
+     * Follows the same document-id resolution pattern as isDirectory().
+     */
+    public long length() {
+        String docId = resolveDocumentId();
+        if (docId == null) return -1;
+
+        Uri docUri = DocumentsContract.buildDocumentUriUsingTree(rootUri, docId);
+        try (Cursor c = resolver.query(docUri,
+                new String[]{DocumentsContract.Document.COLUMN_SIZE},
+                null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                return c.getLong(0);
+            }
+        } catch (Exception ignored) {}
+        return -1;
+    }
+
+    /**
+     * Returns last-modified time as epoch millis, or -1 if not found/unavailable.
+     */
+    public long lastModified() {
+        String docId = resolveDocumentId();
+        if (docId == null) return -1;
+
+        Uri docUri = DocumentsContract.buildDocumentUriUsingTree(rootUri, docId);
+        try (Cursor c = resolver.query(docUri,
+                new String[]{DocumentsContract.Document.COLUMN_LAST_MODIFIED},
+                null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                return c.getLong(0);
+            }
+        } catch (Exception ignored) {}
+        return -1;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Core: resolve FTP path → SAF document ID string
     // ─────────────────────────────────────────────────────────────────────────

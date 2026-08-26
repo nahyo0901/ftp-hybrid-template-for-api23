@@ -35,8 +35,15 @@ dependencies {
     // 🔥 FORCE Apache MINA 2.x (correct version for FTP server)
     implementation "org.apache.mina:mina-core:2.0.21"
 
-// Apache FtpServer (needs MINA 2.x)
-    implementation "org.apache.ftpserver:ftpserver-core:1.2.1"
+    // Apache FtpServer (needs MINA 2.x).
+    // "api" (not "implementation") because FtpUserManager, FtpSession,
+    // FtpDataConnection, and PasvPortPool in this module implement/return
+    // ftpserver interfaces (UserManager, FtpFile, FileSystemView,
+    // FileSystemFactory) -- downstream modules (ftp-hybrid-server,
+    // sample-app) need these on their compile classpath too.
+    api "org.apache.ftpserver:ftpserver-core:1.2.1"
+    api "org.apache.ftpserver:ftplet-api:1.2.1"
+    api "org.slf4j:slf4j-api:1.7.36"
 
     // Optional annotations
     implementation 'androidx.annotation:annotation:1.8.0'
